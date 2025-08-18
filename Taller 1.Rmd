@@ -1,0 +1,66 @@
+---
+title: "Taller 1- Evaluación de impacto"
+author: "Camila Caraballo, Laura Rivera y Zaira Garcia"
+date: "2025-08-16"
+output: html_document
+---
+
+# Taller 1- Regresión e Interpretación Causal
+
+
+```{r}
+# Cargar paquetes
+install.packages("haven")
+library(haven)
+
+# Leer archivo .dta
+data <- read_dta("C:/1. MECA/2025/EVALUACIACÓN DE IMPACTO- Raachid Raaj/Taller 1/corruption_SV.dta")
+```
+
+## 1. Escribir la ecuación la ecuación a estimar
+
+$$y_is=β_0+β_1 x_1is+X_is Γ+λ_s+ε_is$$
+Donde:
+y es igual d
+
+```{r cars}
+# 1. Regresión por MCO 
+reg1<- lm (prop ~ Corrupt, data)
+summary(reg1)
+```
+
+```{r}
+
+# Convertir a factor
+data$GradoSecundaria <- as_factor(data$GradoSecundaria) 
+
+# 2. Regresión por MCO con controles
+reg2 <- lm (prop ~ Corrupt + Auditada + GradoSecundaria + PartidoDesf + AlreadyAudited + CorruptPast + HOMI_CAP_MUN + total + MismoPartidoG , data)
+summary(reg2)
+```
+
+
+```{r}
+install.packages("plm")
+library(plm)
+
+# Una matriz con efectos fijos 
+pdata <- pdata.frame(data, index = c("clavedelaescuela", "year"))
+
+# Modelo de efectos fijos (within estimator)
+fixed_model <- plm(prop ~ Corrupt, 
+                   data = pdata, 
+                   model = "within")
+
+summary(fixed_model)
+```
+
+
+```{r}
+# 4. Regresión por MCO- Efectos Fijos con controles
+fixed_model2 <- plm(prop ~ Corrupt + Auditada + GradoSecundaria + PartidoDesf + AlreadyAudited + CorruptPast + HOMI_CAP_MUN + total + MismoPartidoG, 
+                   data = pdata, 
+                   model = "within")
+
+summary(fixed_model2)
+```
