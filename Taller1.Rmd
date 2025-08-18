@@ -1,4 +1,232 @@
-<<<<<<< HEAD
+---
+title: 'Taller 1:  Introducción al uso de datos'
+author: "Camila Caraballo, Laura Rivera y Javier Amaya"
+date: "2025-08-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exploración y visualización de datos para lo socioeconómico: Clase 1
+
+## Facultad de Economía, Universidad de los Andes
+
+```{r}
+# Cargar paquetes
+#install.packages("openxlsx")
+library(openxlsx)
+#install.packages("dplyr")
+library(dplyr)
+```
+
+#### 1. Idenfique y jusfique la unidad de observación en cada tabla de datos suministrados
+
+**Tabla de área:** la unidad de observación es el *municipio*, ya que constituye el elemento básico sobre el cual se registran los datos. Cada fila corresponde a las variables asociadas a un municipio.
+
+**Tabla de población:** la unidad de observación también es el *municipio*, dado que este es igualmente el nivel territorial en el que se recopila y organiza la información de la tabla.
+
+```{r}
+# Cargar bases de datos
+poblacion <- read.csv("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/mun_area.csv")
+
+area <- read.xlsx("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/pob_censal.xlsx")
+
+```
+
+#### 2. Clasifique cada variable como idenficación o medición; indique tipo y formato.
+
+```{r}
+# Observar estructura de base area
+str(area)
+
+# Número total de filas
+nrow(area)
+
+# Observar estructura de base area
+str(poblacion)
+
+# Número total de filas
+nrow(poblacion)
+```
+
+Bases Área y Población
+
+-   Dp: identificación, nominal, numérico
+
+-   Dpmp: identificación, nominal, entero
+
+-   Mpionarea: medición, continuo, numérico
+
+-   Año creación: identificación, ordinal, numérico
+
+-   Dpnom: identificación, nominal, character
+
+-   Dpmp: identificación, nominal, numérico
+
+-   Mpio: identificación, nominal, caracteres
+
+-   Año: identificación, ordinal, numérico
+
+-   Población: medición, continuo, numérico
+
+#### 3. Proponga al menos 3 reglas mínimas de consistencia para asegurar la calidad de los datos de las variables disponibles y que constituyen parte de la documentación del ejercicio. (e.g., AÑO ∈ {1985,1993,2005,2018}).
+
+#Falta realizar este punto!
+
+### Preparación de los datos
+
+#### 1. Construya la llave única para la tabla de población (sugerencia: DPMP + AÑO).
+
+```{r}
+# Cambiar nombres
+poblacion <- poblacion %>% 
+  rename(AÑO = AÑO_CREACION)
+
+# Llave en población 
+poblacion <- poblacion %>%
+  mutate(llave = paste(DPMP, AÑO, sep = "_"))
+
+# Llave en area
+area <- area %>%
+  mutate(llave = paste(DPMP, AÑO, sep = "_"))
+
+```
+
+#### 2. Verifique duplicados; reporte conteos y la decisión de tratamiento
+
+```{r}
+
+# Calcular NA 
+colSums(is.na(poblacion))
+colSums(is.na(area))
+
+# Verificar duplicados
+poblacion[duplicated(poblacion),]
+area[duplicated(area),]
+
+```
+
+#### 3. Explique qué tipo de unión tendrían las tablas disponibles y por qué.
+
+```{r}
+# Unir muchos a uno
+merge <- merge(poblacion, area, by = "DPMP", all.x = TRUE)
+
+library(dplyr)
+
+# Limpieza de la base
+base_final <- merge %>%
+  transmute(
+    DPMP,
+    DP = DP.x,          
+    DPNOM,
+    MPIO,
+    Area = MPIO_NAREA,  # área fpor municipio
+    Año = AÑO.y,         # año de población
+    Poblacion = Población,
+    llave = paste0(DPMP, "_", AÑO.y) # única llave municipio–año
+  )
+
+```
+
+Se escogió realizar un left join porque este tipo de unión preserva todas las observaciones y variables del primer data frame (población), y añade las variables del segundo data frame (área) únicamente en las observaciones donde encuentra coincidencias en la llave. En los casos en que una observación de la tabla de población no tenga correspondencia en la tabla de área, las variables de esta última se incorporan con valores faltantes (NA). De esta manera, se garantiza que no se pierda información poblacional en ningún año y, al mismo tiempo, se complementa cada municipio con la información estática de área cuando esté disponible.
+
+#### 4. Asegure tipos de datos correctos de acuerdo con las reglas que idenficó previamente (e.g. DP, DPMP caracteres que pueden iniciar con “0”; Población entera).
+
+```{r}
+# Limpiar base
+library(dplyr)
+library(stringr)
+library(stringi)
+
+base_final <- base_final %>%
+  mutate(
+    DP = as.character(DP),  #se pasa a texto        
+    DPMP = as.integer(DPMP),#se pasa a número entero        
+    Poblacion = as.integer(Poblacion), #se pasa a número entero
+    Año = as.integer(Año), #se pasa a número entero
+  )
+```
+
+#### 5. Detecte datos faltantes y decida su tratamiento, si es necesario en el contexto de este ejercicio.
+
+```{r}
+# Verificar duplicados
+base_final[duplicated(base_final),]
+```
+
+#### 6. Estandarice nombres (mayúsculas/acentos) en DPNOM y MPIO, si es necesario.
+
+```{r}
+base_final <- base_final %>%
+  mutate(
+    MPIO = str_trim(str_to_lower(MPIO)), #pasar a minúsculas y quitar espacios
+    DPNOM = str_trim(str_to_lower(DPNOM)),#pasar a minúsculas y quitar espacios
+    MPIO = stri_trans_general(MPIO, "Latin-ASCII"),   #elimina tildes y acentos
+    DPNOM = stri_trans_general(DPNOM, "Latin-ASCII"), #elimina tildes y acentos
+    MPIO = str_to_title(MPIO),    #primera letra mayúscula
+    DPNOM = str_to_title(DPNOM)    #primera letra mayúscula
+  )
+```
+
+#### 7. A partir de la estructura larga de la tabla población (AÑO en columna), cree una versión ancha con columnas Pob_1985, Pob_1993, Pob_2005, Pob_2018 y guárdela en un nuevo archivo.
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+# Crear la versión ancha
+base_ancha <- base_final %>%
+  select(DPMP, DP, DPNOM, MPIO, Area, Año, Poblacion) %>%
+  spread(key = Año, value = Poblacion) %>%
+  rename(
+    Pob_1985 = `1985`,
+    Pob_1993 = `1993`,
+    Pob_2005 = `2005`,
+    Pob_2018 = `2018`
+  )
+
+# Guardar en un nuevo archivo
+write.csv(base_ancha, "base_ancha.csv", row.names = FALSE)
+
+```
+
+#### 8. Explique cuándo trabajar en largo vs. en ancho para las operaciones siguientes.
+
+El formato largo de una base es cuando se tienen observaciones repetidas de una misma variable, como en nuestro caso en la tabla de **base_final**, que cuenta con 8 variables y 44.484 observaciones y es preferible trabajar con esta base para realizar operaciones dado que la llave que se construyó con DMPM y Año, permite que al unicarla con la base de **area** que esta en formato ancho, se conserve la relación de muchos registros de población contra un único registro de área por municipio y año. Mientras que, en el formato ancho se concentran atributos (como población y tiempo) en varias columnas, de manera que la tabla llamada **base_ancha** contiene 9 variables y 11.121 observaciones y esta nos puede ayudar a verificar duplicados o detectar valores faltantes (NA).
+
+### Integración de tablas (join), validaciones y cálculos
+
+#### 1. Realice la unión de las tablas población (largo) con mun_area.csv
+
+```{r}
+
+```
+
+#### 2. Reporte registros sin correspondencia en ambas direcciones.
+
+#### 3. Documente la cardinalidad (muchos-a-uno) y cómo evita relaciones muchos-a-muchos.
+
+### Cálculos de interés (medición) Con la tabla integrada:
+
+#### 1. Densidad poblacional = Población / MPIO_NAREA.
+
+#### 2. Crecimiento absoluto 1985→2018 y crecimiento porcentual 1985→2018 por municipio.
+
+#### 3. Agregación por departamento (DP) para densidad y crecimiento (aclare la definición usada).
+
+### Preguntas de indagación
+
+#### 1. ¿Cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985? Absoluto y porcentual.
+
+#### 2. ¿Cuáles son los 10 municipios de Colombia con mayor densidad en 1993 y en 2018?
+
+#### 3. ¿Cuáles son los 5 departamentos de Colombia con mayor densidad en 1993 y en 2018?
+
+# \#### 4. ¿Cómo ha cambiado la distribución de la población municipal colombiana desde 1985? Puede realizar un análisis por cuar les o percen les con gráficos.
+
 ---
 title: 'Taller 1:  Introducción al uso de datos'
 author: "Camila Caraballo, Laura Rivera y Javier Amaya"
@@ -200,252 +428,32 @@ write.csv(base_ancha, "base_ancha.csv", row.names = FALSE)
 
 El formato largo de una base es cuando se tienen observaciones repetidas de una misma variable, como en nuestro caso en la tabla de **base_final**, que cuenta con 8 variables y 44.484 observaciones y es preferible trabajar con esta base para realizar operaciones dado que la llave que se construyó con DMPM y Año, permite que al unicarla con la base de **area** que esta en formato ancho, se conserve la relación de muchos registros de población contra un único registro de área por municipio y año. Mientras que, en el formato ancho se concentran atributos (como población y tiempo) en varias columnas, de manera que la tabla llamada **base_ancha** contiene 9 variables y 11.121 observaciones y esta nos puede ayudar a verificar duplicados o detectar valores faltantes (NA).
 
-
 ### Integración de tablas (join), validaciones y cálculos
 
 #### 1. Realice la unión de las tablas población (largo) con mun_area.csv
+
 ```{r}
 
 ```
 
 #### 2. Reporte registros sin correspondencia en ambas direcciones.
+
 #### 3. Documente la cardinalidad (muchos-a-uno) y cómo evita relaciones muchos-a-muchos.
 
 ### Cálculos de interés (medición) Con la tabla integrada:
 
 #### 1. Densidad poblacional = Población / MPIO_NAREA.
+
 #### 2. Crecimiento absoluto 1985→2018 y crecimiento porcentual 1985→2018 por municipio.
+
 #### 3. Agregación por departamento (DP) para densidad y crecimiento (aclare la definición usada).
 
 ### Preguntas de indagación
 
 #### 1. ¿Cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985? Absoluto y porcentual.
+
 #### 2. ¿Cuáles son los 10 municipios de Colombia con mayor densidad en 1993 y en 2018?
+
 #### 3. ¿Cuáles son los 5 departamentos de Colombia con mayor densidad en 1993 y en 2018?
+
 #### 4. ¿Cómo ha cambiado la distribución de la población municipal colombiana desde 1985? Puede realizar un análisis por cuar les o percen les con gráficos.
-=======
----
-title: 'Taller 1:  Introducción al uso de datos'
-author: "Camila Caraballo, Laura Rivera y Javier Amaya"
-date: "2025-08-16"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-# Exploración y visualización de datos para lo socioeconómico: Taller 1
-
-## Facultad de Economía, Universidad de los Andes
-
-### Entendimiento de los datos
-
-```{r}
-# Cargar paquetes
-#install.packages("openxlsx")
-library(openxlsx)
-#install.packages("dplyr")
-library(dplyr)
-```
-
-#### 1. Idenfique y jusfique la unidad de observación en cada tabla de datos suministrados
-
-Para la tabla de área la unidad de observación es el municipio pues es el elemento básico sobre el que se registran los datos y en ese sentido es la unidad a la que le corresponden las variables de cada fila en la tabla.
-
-Para la tabla de población, la unidad de observación es la misma, es decir el municipio, pues igualmente es el elemento sobre el que se registran los datos de esta tabla.
-
-```{r}
-# Cargar bases de datos
-poblacion <- read.csv("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/mun_area.csv")
-
-area <- read.xlsx("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/pob_censal.xlsx")
-
-```
-
-#### 2. Clasifique cada variable como idenficación o medición; indique tipo y formato.
-
-```{r}
-# Observar estructura de base area
-str(area)
-
-# Número total de filas
-nrow(area)
-
-# Observar estructura de base area
-str(poblacion)
-
-# Número total de filas
-nrow(poblacion)
-```
-
-Bases Área y Población
-
--   Dp: identificación, nominal, numérico
-
--   Dpmp: identificación, nominal, entero
-
--   Mpionarea: medición, continuo, numérico
-
--   Año creación: identificación, ordinal, numérico
-
--   Dpnom: identificación, nominal, character
-
--   Dpmp: identificación, nominal, numérico
-
--   Mpio: identificación, nominal, caracteres
-
--   Año: identificación, ordinal, numérico
-
--   Población: medición, continuo, numérico
-
-#### 3. Proponga al menos 3 reglas mínimas de consistencia para asegurar la calidad de los datos de las variables disponibles y que constituyen parte de la documentación del ejercicio. (e.g., AÑO ∈ {1985,1993,2005,2018}).
-
-#Falta realizar este punto!
-
-### Preparación de los datos
-
-#### 1. Construya la llave única para la tabla de población (sugerencia: DPMP + AÑO).
-
-```{r}
-# Cambiar nombres
-poblacion <- poblacion %>% 
-  rename(AÑO = AÑO_CREACION)
-
-# Llave en población 
-poblacion <- poblacion %>%
-  mutate(llave = paste(DPMP, AÑO, sep = "_"))
-
-# Llave en area
-area <- area %>%
-  mutate(llave = paste(DPMP, AÑO, sep = "_"))
-
-```
-
-#### 2. Verifique duplicados; reporte conteos y la decisión de tratamiento
-
-```{r}
-
-# Calcular NA 
-colSums(is.na(poblacion))
-colSums(is.na(area))
-
-# Verificar duplicados
-poblacion[duplicated(poblacion),]
-area[duplicated(area),]
-
-```
-
-#### 3. Explique qué tipo de unión tendrían las tablas disponibles y por qué.
-
-```{r}
-# Unir muchos a uno
-merge <- merge(poblacion, area, by = "DPMP", all.x = TRUE)
-
-library(dplyr)
-
-# Limpieza de la base
-base_final <- merge %>%
-  transmute(
-    DPMP,
-    DP = DP.x,          
-    DPNOM,
-    MPIO,
-    Area = MPIO_NAREA,  # área fpor municipio
-    Año = AÑO.y,         # año de población
-    Poblacion = Población,
-    llave = paste0(DPMP, "_", AÑO.y) # única llave municipio–año
-  )
-
-```
-
-Se escogió realizar un left join porque este tipo de unión preserva todas las observaciones y variables del primer data frame (población), y añade las variables del segundo data frame (área) únicamente en las observaciones donde encuentra coincidencias en la llave. En los casos en que una observación de la tabla de población no tenga correspondencia en la tabla de área, las variables de esta última se incorporan con valores faltantes (NA). De esta manera, se garantiza que no se pierda información poblacional en ningún año y, al mismo tiempo, se complementa cada municipio con la información estática de área cuando esté disponible.
-
-#### 4. Asegure tipos de datos correctos de acuerdo con las reglas que idenficó previamente (e.g. DP, DPMP caracteres que pueden iniciar con “0”; Población entera).
-
-```{r}
-# Limpiar base
-library(dplyr)
-library(stringr)
-library(stringi)
-
-base_final <- base_final %>%
-  mutate(
-    DP = as.character(DP),  #se pasa a texto        
-    DPMP = as.integer(DPMP),#se pasa a número entero        
-    Poblacion = as.integer(Poblacion), #se pasa a número entero
-    Año = as.integer(Año), #se pasa a número entero
-  )
-```
-
-#### 5. Detecte datos faltantes y decida su tratamiento, si es necesario en el contexto de este ejercicio.
-
-```{r}
-# Verificar duplicados
-base_final[duplicated(base_final),]
-```
-
-#### 6. Estandarice nombres (mayúsculas/acentos) en DPNOM y MPIO, si es necesario.
-
-```{r}
-base_final <- base_final %>%
-  mutate(
-    MPIO = str_trim(str_to_lower(MPIO)), #pasar a minúsculas y quitar espacios
-    DPNOM = str_trim(str_to_lower(DPNOM)),#pasar a minúsculas y quitar espacios
-    MPIO = stri_trans_general(MPIO, "Latin-ASCII"),   #elimina tildes y acentos
-    DPNOM = stri_trans_general(DPNOM, "Latin-ASCII"), #elimina tildes y acentos
-    MPIO = str_to_title(MPIO),    #primera letra mayúscula
-    DPNOM = str_to_title(DPNOM)    #primera letra mayúscula
-  )
-```
-
-#### 7. A partir de la estructura larga de la tabla población (AÑO en columna), cree una versión ancha con columnas Pob_1985, Pob_1993, Pob_2005, Pob_2018 y guárdela en un nuevo archivo.
-
-```{r}
-library(dplyr)
-library(tidyr)
-
-# Crear la versión ancha
-base_ancha <- base_final %>%
-  select(DPMP, DP, DPNOM, MPIO, Area, Año, Poblacion) %>%
-  spread(key = Año, value = Poblacion) %>%
-  rename(
-    Pob_1985 = `1985`,
-    Pob_1993 = `1993`,
-    Pob_2005 = `2005`,
-    Pob_2018 = `2018`
-  )
-
-# Guardar en un nuevo archivo
-write.csv(base_ancha, "base_ancha.csv", row.names = FALSE)
-
-```
-
-#### 8. Explique cuándo trabajar en largo vs. en ancho para las operaciones siguientes.
-
-El formato largo de una base es cuando se tienen observaciones repetidas de una misma variable, como en nuestro caso en la tabla de **base_final**, que cuenta con 8 variables y 44.484 observaciones y es preferible trabajar con esta base para realizar operaciones dado que la llave que se construyó con DMPM y Año, permite que al unicarla con la base de **area** que esta en formato ancho, se conserve la relación de muchos registros de población contra un único registro de área por municipio y año. Mientras que, en el formato ancho se concentran atributos (como población y tiempo) en varias columnas, de manera que la tabla llamada **base_ancha** contiene 9 variables y 11.121 observaciones y esta nos puede ayudar a verificar duplicados o detectar valores faltantes (NA).
-
-
-### Integración de tablas (join), validaciones y cálculos
-
-#### 1. Realice la unión de las tablas población (largo) con mun_area.csv
-```{r}
-
-```
-
-#### 2. Reporte registros sin correspondencia en ambas direcciones.
-#### 3. Documente la cardinalidad (muchos-a-uno) y cómo evita relaciones muchos-a-muchos.
-
-### Cálculos de interés (medición) Con la tabla integrada:
-
-#### 1. Densidad poblacional = Población / MPIO_NAREA.
-#### 2. Crecimiento absoluto 1985→2018 y crecimiento porcentual 1985→2018 por municipio.
-#### 3. Agregación por departamento (DP) para densidad y crecimiento (aclare la definición usada).
-
-### Preguntas de indagación
-
-#### 1. ¿Cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985? Absoluto y porcentual.
-#### 2. ¿Cuáles son los 10 municipios de Colombia con mayor densidad en 1993 y en 2018?
-#### 3. ¿Cuáles son los 5 departamentos de Colombia con mayor densidad en 1993 y en 2018?
-#### 4. ¿Cómo ha cambiado la distribución de la población municipal colombiana desde 1985? Puede realizar un análisis por cuar les o percen les con gráficos.
->>>>>>> 99ba48b00aa9a9fe7c424a7dca31f97a55d835c2
