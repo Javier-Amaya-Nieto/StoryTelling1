@@ -1,2 +1,2 @@
-# StoryTelling1
-Primer taller de la materia story telling
+# Exploración y Visualización de Datos
+Taller 1:  Introducción al uso de datos
