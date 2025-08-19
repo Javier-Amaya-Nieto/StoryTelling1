@@ -19,6 +19,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(openxlsx)
 #install.packages("dplyr")
 library(dplyr)
+library(tibble)
 ```
 
 #### 1. Idenfique y jusfique la unidad de observación en cada tabla de datos suministrados
@@ -28,10 +29,9 @@ library(dplyr)
 **Tabla de población:** la unidad de observación también es el *municipio*, dado que este es igualmente el nivel territorial en el que se recopila y organiza la información de la tabla.
 
 ```{r}
-# Cargar bases de datos
-poblacion <- read.csv("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/mun_area.csv")
-
-area <- read.xlsx("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Miguel Andres Garzón/Taller 1/pob_censal.xlsx")
+# Cargar las bases de datos
+base_area <- read.csv("mun_area.csv")
+base_pob <- read.xlsx("pob_censal.xlsx")
 
 ```
 
@@ -39,59 +39,55 @@ area <- read.xlsx("C:/1. MECA/2025/EXPLORACIÓN Y VISUALIZACIÓN DE DATOS- Migue
 
 ```{r}
 # Observar estructura de base area
-str(area)
-
-# Número total de filas
-nrow(area)
+str(base_area)
 
 # Observar estructura de base area
-str(poblacion)
+str(base_pob)
 
 # Número total de filas
-nrow(poblacion)
+nrow(base_pob)
+
+#Creación de un diccionario 
+
+Diccionario <- tribble(
+  ~Variable,~Clasificación,~Tipo,~Fromato, 
+   "DP","Identificación","Nominal","Numérico",
+   "DPMP", "Identificación","Nominal", "Numérico",
+   "MPIO_NAREA", "Medición", "Continuo", "Numérico",
+   "AÑO_CREACION", "Medición", "Ordinal", "Numérico", 
+   "DPNOM", "Identiticación", "Nominal", "Texto",
+   "MPIO", "Identificación", "Nominal", "Texto",
+   "AÑO", "Identificación", "Ordinal", "Numérico", 
+  "POBLACIÓN", "Medición", "Continuo", "Numérico"
+)
+
+print(Diccionario)
 ```
-
-Bases Área y Población
-
--   Dp: identificación, nominal, numérico
-
--   Dpmp: identificación, nominal, entero
-
--   Mpionarea: medición, continuo, numérico
-
--   Año creación: identificación, ordinal, numérico
-
--   Dpnom: identificación, nominal, character
-
--   Dpmp: identificación, nominal, numérico
-
--   Mpio: identificación, nominal, caracteres
-
--   Año: identificación, ordinal, numérico
-
--   Población: medición, continuo, numérico
 
 #### 3. Proponga al menos 3 reglas mínimas de consistencia para asegurar la calidad de los datos de las variables disponibles y que constituyen parte de la documentación del ejercicio. (e.g., AÑO ∈ {1985,1993,2005,2018}).
 
-#Falta realizar este punto!
+```{r}
+
+Reglas <- tribble(
+  ~Variable,~Tipo_de_regla,~Regla,
+   "AÑO","Dominio","AÑO ∈{1985, 1993, 2005, 2018}",
+   "POBLACIÓN", "Rango","Población > 0",
+   "ÁREA", "Rango", "Área > 0 "
+)
+
+print(Reglas)
+
+```
 
 ### Preparación de los datos
 
 #### 1. Construya la llave única para la tabla de población (sugerencia: DPMP + AÑO).
 
 ```{r}
-# Cambiar nombres
-poblacion <- poblacion %>% 
-  rename(AÑO = AÑO_CREACION)
 
 # Llave en población 
-poblacion <- poblacion %>%
+base_pob <- base_pob %>%
   mutate(llave = paste(DPMP, AÑO, sep = "_"))
-
-# Llave en area
-area <- area %>%
-  mutate(llave = paste(DPMP, AÑO, sep = "_"))
-
 ```
 
 #### 2. Verifique duplicados; reporte conteos y la decisión de tratamiento
@@ -99,39 +95,37 @@ area <- area %>%
 ```{r}
 
 # Calcular NA 
-colSums(is.na(poblacion))
-colSums(is.na(area))
+colSums(is.na(base_pob))
+colSums(is.na(base_area))
 
 # Verificar duplicados
-poblacion[duplicated(poblacion),]
-area[duplicated(area),]
+anyDuplicated(base_pob$llave) 
+anyDuplicated(base_area$llave) 
 
 ```
 
 #### 3. Explique qué tipo de unión tendrían las tablas disponibles y por qué.
 
 ```{r}
-# Unir muchos a uno
-merge <- merge(poblacion, area, by = "DPMP", all.x = TRUE)
+# Unir many to one 
+base_final <- left_join(
+  base_pob, base_area,
+  by = "DPMP",
+  relationship = "many-to-one"   
+)
 
-library(dplyr)
+#Revisión de la unión
+base_final <- base_final %>%
+  arrange(DPMP, AÑO)
 
-# Limpieza de la base
-base_final <- merge %>%
-  transmute(
-    DPMP,
-    DP = DP.x,          
-    DPNOM,
-    MPIO,
-    Area = MPIO_NAREA,  # área fpor municipio
-    Año = AÑO.y,         # año de población
-    Poblacion = Población,
-    llave = paste0(DPMP, "_", AÑO.y) # única llave municipio–año
-  )
-
+#Arreglo de base de datos 
+base_final <- base_final %>%
+  select(-DP.y) %>%
+  rename(DP = DP.x) %>%
+  select(llave, everything())
 ```
 
-Se escogió realizar un left join porque este tipo de unión preserva todas las observaciones y variables del primer data frame (población), y añade las variables del segundo data frame (área) únicamente en las observaciones donde encuentra coincidencias en la llave. En los casos en que una observación de la tabla de población no tenga correspondencia en la tabla de área, las variables de esta última se incorporan con valores faltantes (NA). De esta manera, se garantiza que no se pierda información poblacional en ningún año y, al mismo tiempo, se complementa cada municipio con la información estática de área cuando esté disponible.
+Se optó por realizar un *left join con relación many-to-one*, dado que la tabla de población contiene múltiples observaciones por municipio a lo largo de distintos años, mientras que la tabla de área registra una única observación por municipio (información estática). Este tipo de unión asegura que se conserven todas las filas de la tabla de población y que a cada una de ellas se le añadan los atributos de área correspondientes al municipio. De esta manera, se garantiza que no se pierda información temporal de población y, al mismo tiempo, se complementa cada registro municipio–año con la información de área cuando está disponible.
 
 #### 4. Asegure tipos de datos correctos de acuerdo con las reglas que idenficó previamente (e.g. DP, DPMP caracteres que pueden iniciar con “0”; Población entera).
 
