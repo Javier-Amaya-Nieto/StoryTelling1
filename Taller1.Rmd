@@ -158,7 +158,7 @@ colSums(is.na(base_pob))
 colSums(is.na(base_area))
 
 ```
-Se entiende que la variable año_creación hace referencia al momento en que un municipio fue oficialmente constituido. Los vacíos en los datos de población parecen estar asociados a que algunos años de observación son previos a la fecha de creación de los municipios; es decir, probablemente no existe información disponible antes de que fueran reconocidos como entidades administrativas. Para solucionar esta limitación se propone imputar los valores faltantes utilizando como referencia la mediana de la población en municipios con un área similar.
+Se entiende que la variable año_creación hace referencia al momento en que un municipio fue oficialmente constituido. Los vacíos en los datos de población parecen estar asociados a que algunos años de observación son previos a la fecha de creación de los municipios; es decir, probablemente no existe información disponible antes de que fueran reconocidos como entidades administrativas. Para solucionar esta limitación se propone imputar los valores faltantes utilizando como referencia la mediana de la población en municipios con un área similar para el año correspondiente. En este paso se identifican 155 datos faltantes en la base de población en la variable "Población". 
 
 #### 6. Estandarice nombres (mayúsculas/acentos) en DPNOM y MPIO, si es necesario.
 
@@ -190,7 +190,8 @@ write.csv(base_ancha_pob, "base_ancha.csv", row.names = FALSE)
 
 #### 8. Explique cuándo trabajar en largo vs. en ancho para las operaciones siguientes.
 
-El formato largo de una base es cuando se tienen observaciones repetidas de una misma variable, como en nuestro caso en la tabla de **base_final**, que cuenta con 8 variables y 44.484 observaciones y es preferible trabajar con esta base para realizar operaciones dado que la llave que se construyó con DMPM y Año, permite que al unicarla con la base de **area** que esta en formato ancho, se conserve la relación de muchos registros de población contra un único registro de área por municipio y año. Mientras que, en el formato ancho se concentran atributos (como población y tiempo) en varias columnas, de manera que la tabla llamada **base_ancha** contiene 9 variables y 11.121 observaciones y esta nos puede ayudar a verificar duplicados o detectar valores faltantes (NA).
+La elección entre el formato largo y ancho depende de la operación: el formato largo es ideal para analizar y visualizar tendencias a lo largo del tiempo como en la mayoría de análisis requeridos en este trabajo, mientras que el formato ancho es necesario para calcular cambios entre puntos temporales específicos, como el crecimiento poblacional. Por lo tanto, se decide mantener la tabla de datos principal en formato largo y crear una versión ancha temporal con pivot_wider() con el proposito de  responder a la pregunta de cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985.
+
 
 ### Integración de tablas (join), validaciones y cálculos
 
@@ -200,53 +201,228 @@ El formato largo de una base es cuando se tienen observaciones repetidas de una 
 # Unir many to one 
 base_final <- left_join(
   base_pob, base_area,
-  by = "DPMP",
+  by = "dpmp",
   relationship = "many-to-one"   
 )
 
-#Revisión de la unión
-base_final <- base_final %>%
-  arrange(DPMP, AÑO)
-
-#Arreglo de base de datos 
-base_final <- base_final %>%
-  select(-DP.y) %>%
-  rename(DP = DP.x) %>%
-  select(llave, everything())
 ```
 
 #### 2. Reporte registros sin correspondencia en ambas direcciones.
 
 ```{r}
-# identificando el municipio diferente
+# identificando los registros sin correspondencia
+colSums(is.na(base_final))
+
+
+# Dirección 1: de base_pob a base_area
+poblacion_sin_area <- base_pob %>%
+  distinct(dpmp, dpnom, mpio) %>% 
+  anti_join(base_area, by = "dpmp")
+# identificando el municipio de diferencia entre la base de población y de área
 poblacion_limpia_pob <- base_pob %>%
-  distinct(DPMP)
+  distinct(dpmp)
 poblacion_limpia_area <- base_area %>%
-  distinct(DPMP)
+  distinct(dpmp)
 poblacion_limpia_area <- poblacion_limpia_area %>% mutate(var1=1) 
-tabla_integrada <- left_join(poblacion_limpia_pob, poblacion_limpia_area, by = "DPMP")
+tabla_integrada <- left_join(poblacion_limpia_pob, poblacion_limpia_area, by = "dpmp")
 tabla_integrada %>%
   filter(is.na(var1))
 
-# Validación B
-# Agrupar por municipio y contar el número de registros (años) por municipio
-conteo_censos_por_municipio <- base_pob %>%
-  count(DPMP, name = "n_registros")
-# revisando la cantidad de registros por municipio
-table(conteo_censos_por_municipio$n_registros)
+# Dirección 2: de base_area a base_pob
+# Encuentra los municipios en la base de área que no están en la de población
+# usando el nombre de la llave en minúsculas: dpmp
+area_sin_poblacion <- base_area %>%
+  anti_join(base_pob, by = "dpmp")
+
 ```
 
-al revisar estos resultados observamos que el municipio con DPMP 94663 solo está en la base de datos censales de los municipios. Considerando que no tenemos información que nos permita imputar la información 
+al revisar estos resultados observamos que el municipio con DPMP 94663 (mapiripana) solo está en la base de datos censales de los municipios. Considerando que no tenemos información que nos permita imputar estos datos y su irrelevancia para responder a las preguntas de indagación, se decide retirar este municipio.  
 
 #### 3. Documente la cardinalidad (muchos-a-uno) y cómo evita relaciones muchos-a-muchos.
+
+Teniendo como referencia la estrategia planteada en el punto 3 de la preparación de datos, verificamos el N de observaciones y el número de llaves distintas en cada base para identificar la tabla de "muchos" y la tabla de "uno". Además de esto se debe garantizar que las llaves no tengan duplicados (paso realizado previamente también) al igual que se debe hacer una verificación de los N totales durante el proceso de unión.   
+
+```{r}
+
+# CARDINALIDAD
+# N para la base población
+print(paste("Número de filas en la 'base_pob':", nrow(base_pob)))
+print(paste("Número de llaves únicas 'base_pob':", n_distinct(base_pob$dpmp)))
+
+# N para la base de área
+print(paste("Número de filas en la 'base_area':", nrow(base_area)))
+print(paste("Número de llaves únicas 'base_area':", n_distinct(base_area$dpmp)))
+
+# UNICIDAD DE LAS LLAVES EN LA BASE AREA
+# Esto ya lo habíamos verificado, pero incluimos el paso por seguridas
+duplicados_en_area <- base_area %>%
+  count(dpmp) %>%
+  filter(n > 1)
+
+print(paste("Duplicados en 'base_pob':", nrow(duplicados_en_area)))
+
+#VERIFICACIÓN DURANTE EL PROCESO DE UNIÓN
+# Conteo de N de la tabla original y la tabla resultante de la unión. 
+print(paste("Filas en 'base_pob':", nrow(base_pob)))
+print(paste("Filas en 'base_final':", nrow(base_final)))
+
+```
+```{r}
+#Arreglo de base de datos 
+base_final <- base_final %>%
+  select(-dp.y) %>%
+  rename(dp = dp.x) %>%
+  select(llave, everything())
+
+# Retirando la observación correspondiente a Mapiripana
+base_filtrada <- base_final %>% filter(!dpmp==94663)
+
+# Haciendo la imputación de la población 
+base_final_imp <- base_filtrada %>%
+  # Paso 1: Crear una nueva variable para el grupo de área (usando quintiles)
+  mutate(area_quintil = ntile(mpio_narea, 5)) %>%
+  # Pasos 2 y 3: Agrupar por área y año, y luego imputar
+  group_by(area_quintil, ano) %>%
+  mutate(poblacion_imputada = if_else(
+    is.na(poblacion),
+    as.double(median(poblacion, na.rm = TRUE)), 
+    as.double(poblacion)
+  )) %>%
+  ungroup()
+
+```
+
+
 
 ### Cálculos de interés (medición) Con la tabla integrada:
 
 #### 1. Densidad poblacional = Población / MPIO_NAREA.
 
+```{r}
+base_final_imp <- base_final_imp %>% 
+  mutate(densidad_pob = poblacion_imputada/mpio_narea)
+```
+
+
 #### 2. Crecimiento absoluto 1985→2018 y crecimiento porcentual 1985→2018 por municipio.
 
+Teniendo en cuenta la propuesta realizada de manejo de esta variable usando datos en formato ancho: 
+
+```{r}
+
+# Creamos un objeto intermedio
+datos_filtrados <- base_final_imp %>%
+  select(dpmp, ano, poblacion_imputada) %>%
+  filter(ano %in% c(1985, 2018))
+# Creamos un segundo objeto intermedio 'datos_anchos'
+datos_anchos <- datos_filtrados %>%
+  pivot_wider(
+    names_from = ano,
+    values_from = poblacion_imputada,
+    names_prefix = "pob_"
+  )
+# Creamos el df con los crecimientos absolutos y relativos
+crecimiento_municipios <- datos_anchos %>%
+  mutate(
+    # Crecimiento Absoluto
+    crecimiento_abs = pob_2018 - pob_1985,
+    
+    # Crecimiento Porcentual
+    crecimiento_pct = (crecimiento_abs / pob_1985) * 100)
+
+# Ahora pegamos las nuevas dos variables a la base de análisis
+# Seleccionando las variables
+variables_crecimiento <- crecimiento_municipios %>%
+  select(dpmp, crecimiento_abs, crecimiento_pct)
+
+# Unimos las nuevas variables a la base de datos principal
+base_completa <- left_join(base_final_imp, variables_crecimiento, by = "dpmp")
+
+```
+
 #### 3. Agregación por departamento (DP) para densidad y crecimiento (aclare la definición usada).
+
+Para estas variables se usará una aproximación de suma del área total de cada municipio (constante en el tiempo) y suma de la población total por municipio para cada año (progresa durante los diferentes censos). Luego de esto sí calculan la densidad y crecimiento poblacional. 
+
+```{r}
+# DENSIDAD POBLACIONAL
+
+# Calculamos el área total de cada departamento
+areas_departamentales <- base_completa %>%
+  distinct(dp, dpnom, dpmp, mpio_narea) %>% 
+  group_by(dp, dpnom) %>%
+  summarise(area_total_depto = sum(mpio_narea)) %>%
+  ungroup()
+
+# Calculamos la población total por departamento y por año
+poblacion_departamental <- base_completa %>%
+  group_by(dp, dpnom, ano) %>%
+  summarise(poblacion_total_depto = sum(poblacion_imputada)) %>%
+  ungroup()
+
+# Ahora unimos la población y área para calcular la densidad poblacional departamental por año
+densidad_departamental <- left_join(poblacion_departamental, areas_departamentales, by = c("dp", "dpnom")) %>%
+  mutate(densidad_depto = poblacion_total_depto / area_total_depto)
+
+
+# CRECIMIENTO POBLACIONAL (ABSOLUTO Y PORCENTUAL)
+
+# Crecimiento Absoluto Departamental 
+
+  ## Añadimos el código de departamento a la tabla de crecimiento.
+  codigos_depto <- base_completa %>% 
+    distinct(dpmp, dp, dpnom)
+  
+  ## Unimos los códigos de depto a la tabla de crecimiento municipal
+  crecimiento_municipios_con_depto <- left_join(crecimiento_municipios, codigos_depto, by = "dpmp")
+  
+  ## Agrupamos por departamento y sumamos el crecimiento absoluto
+  crecimiento_abs_depto <- crecimiento_municipios_con_depto %>%
+    group_by(dp, dpnom) %>%
+    summarise(crecimiento_abs_depto = sum(crecimiento_abs, na.rm = TRUE)) %>%
+    ungroup()
+
+
+# Crecimiento Porcentual Departamental 
+
+# Creamos un nuevo objeto solo con los datos de los años extremos.
+poblacion_filtrada_depto <- poblacion_departamental %>%
+  filter(ano %in% c(1985, 2018))
+# Creamos un segundo objeto intermedio en formato ancho.
+poblacion_ancha_depto <- poblacion_filtrada_depto %>%
+  pivot_wider(
+    names_from = ano,
+    values_from = poblacion_total_depto,
+    names_prefix = "pob_depto_"
+  )
+# Creamos el objeto final que contiene el cálculo.
+poblacion_depto_extremos <- poblacion_ancha_depto %>%
+  mutate(
+    crecimiento_pct_depto = ((pob_depto_2018 - pob_depto_1985) / pob_depto_1985) * 100
+  )
+variables_pct_depto <- poblacion_depto_extremos %>%
+  select(dp, dpnom, crecimiento_pct_depto)
+
+# Uniendo las variables de crecimiento en un DF
+crecimiento_departamental <- left_join(crecimiento_abs_depto, variables_pct_depto, by = c("dp", "dpnom"))
+
+# UNIENDO LAS NUEVAS VARIABLES CREADS
+
+# Seleccionamos solo las llaves y la nueva variable de densidad
+variables_densidad_depto <- densidad_departamental %>%
+  select(dp, dpnom, ano, densidad_depto)
+
+# Unimos estas variables a la base principal
+base_con_densidad <- left_join(base_final_imp, variables_densidad_depto, by = c("dp", "dpnom", "ano"))
+
+# Unimos las variables de crecimiento al resultado del paso anterior
+base_final_con_agregados <- left_join(base_con_densidad, crecimiento_departamental, by = c("dp", "dpnom"))
+
+# renombrando la base de análisis
+df_clean <- base_final_con_agregados
+
+
+```
 
 ### Preguntas de indagación
 
