@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 # Cargar paquetes
+#install.packages("janitor")
 #install.packages("openxlsx")
 library(openxlsx)
 #install.packages("dplyr")
@@ -23,6 +24,7 @@ library(tibble)
 library(stringr)
 library(stringi)
 library(janitor)
+library(ggplot2)
 library(tidyr)
 
 ```
@@ -84,7 +86,6 @@ Reglas <- tribble(
 print(Reglas)
 ```
 
-
 ### Preparación de los datos
 
 #### 1. Construya la llave única para la tabla de población (sugerencia: DPMP + AÑO).
@@ -96,9 +97,12 @@ base_pob <- base_pob %>%
 ```
 
 #### 2. Verifique duplicados; reporte conteos y la decisión de tratamiento
-Verificamos los duplicados y algunas reglas adicionales relacionadas con los N totales: 
-a- La cantidad de valores distintos de municipios en la variable DPMP debe ser igual en ambas bases. 
-b- La cantidad de filas en la base de datos de censos poblacionales debe ser 4 veces la cantidad de municipios en la base. 
+
+Verificamos los duplicados y algunas reglas adicionales relacionadas con los N totales:
+
+a) La cantidad de valores distintos de municipios en la variable DPMP debe ser igual en ambas bases.
+
+b) La cantidad de filas en la base de datos de censos poblacionales debe ser 4 veces la cantidad de municipios en la base.
 
 ```{r}
 # Verificar duplicados
@@ -121,7 +125,8 @@ print(paste("Número de municipios únicos en la base de población:", n_municip
 print(paste("Número de municipios únicos en la base de áreas:", n_municipios_area))
 
 ```
-Con esta información podemos concluir que no hay duplicados en las bases iniciales, pero hay diferencia en el número de municipios de las bases(1121 municipios en la base de áreas y 1122 en la base de datos censales). 
+
+Con esta información podemos concluir que no hay duplicados en las bases iniciales, pero hay diferencia en el número de municipios de las bases(1121 municipios en la base de áreas y 1122 en la base de datos censales).
 
 #### 3. Explique qué tipo de unión tendrían las tablas disponibles y por qué.
 
@@ -145,7 +150,7 @@ base_pob <- base_pob %>%
 # --- REGLA 3: Rango de la variable ÁREA ---
 # Regla: El valor de Área debe ser mayor que 0.
 area_invalida <- base_area %>%
-  filter(MPIO_NAREA <= 0)
+  filter(MPIO_NAREA >= 0)
 
 ```
 
@@ -158,7 +163,8 @@ colSums(is.na(base_pob))
 colSums(is.na(base_area))
 
 ```
-Se entiende que la variable año_creación hace referencia al momento en que un municipio fue oficialmente constituido. Los vacíos en los datos de población parecen estar asociados a que algunos años de observación son previos a la fecha de creación de los municipios; es decir, probablemente no existe información disponible antes de que fueran reconocidos como entidades administrativas. Para solucionar esta limitación se propone imputar los valores faltantes utilizando como referencia la mediana de la población en municipios con un área similar para el año correspondiente. En este paso se identifican 155 datos faltantes en la base de población en la variable "Población". 
+
+Se entiende que la variable año_creación hace referencia al momento en que un municipio fue oficialmente constituido. Los vacíos en los datos de población parecen estar asociados a que algunos años de observación son previos a la fecha de creación de los municipios; es decir, probablemente no existe información disponible antes de que fueran reconocidos como entidades administrativas. Para solucionar esta limitación se propone imputar los valores faltantes utilizando como referencia la mediana de la población en municipios con un área similar para el año correspondiente. En este paso se identifican 155 datos faltantes en la base de población en la variable "Población".
 
 #### 6. Estandarice nombres (mayúsculas/acentos) en DPNOM y MPIO, si es necesario.
 
@@ -190,8 +196,7 @@ write.csv(base_ancha_pob, "base_ancha.csv", row.names = FALSE)
 
 #### 8. Explique cuándo trabajar en largo vs. en ancho para las operaciones siguientes.
 
-La elección entre el formato largo y ancho depende de la operación: el formato largo es ideal para analizar y visualizar tendencias a lo largo del tiempo como en la mayoría de análisis requeridos en este trabajo, mientras que el formato ancho es necesario para calcular cambios entre puntos temporales específicos, como el crecimiento poblacional. Por lo tanto, se decide mantener la tabla de datos principal en formato largo y crear una versión ancha temporal con pivot_wider() con el proposito de  responder a la pregunta de cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985.
-
+La elección entre el formato largo y ancho depende de la operación: el formato largo es ideal para analizar y visualizar tendencias a lo largo del tiempo como en la mayoría de análisis requeridos en este trabajo, mientras que el formato ancho es necesario para calcular cambios entre puntos temporales específicos, como el crecimiento poblacional. Por lo tanto, se decide mantener la tabla de datos principal en formato largo y crear una versión ancha temporal con pivot_wider() con el proposito de responder a la pregunta de cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985.
 
 ### Integración de tablas (join), validaciones y cálculos
 
@@ -218,11 +223,14 @@ colSums(is.na(base_final))
 poblacion_sin_area <- base_pob %>%
   distinct(dpmp, dpnom, mpio) %>% 
   anti_join(base_area, by = "dpmp")
+
 # identificando el municipio de diferencia entre la base de población y de área
 poblacion_limpia_pob <- base_pob %>%
   distinct(dpmp)
+
 poblacion_limpia_area <- base_area %>%
   distinct(dpmp)
+
 poblacion_limpia_area <- poblacion_limpia_area %>% mutate(var1=1) 
 tabla_integrada <- left_join(poblacion_limpia_pob, poblacion_limpia_area, by = "dpmp")
 tabla_integrada %>%
@@ -236,11 +244,11 @@ area_sin_poblacion <- base_area %>%
 
 ```
 
-al revisar estos resultados observamos que el municipio con DPMP 94663 (mapiripana) solo está en la base de datos censales de los municipios. Considerando que no tenemos información que nos permita imputar estos datos y su irrelevancia para responder a las preguntas de indagación, se decide retirar este municipio.  
+Al revisar estos resultados observamos que el municipio con DPMP 94663 (Mapiripana) solo está en la base de datos censales de los municipios. Considerando que no tenemos información que nos permita imputar estos datos y su irrelevancia para responder a las preguntas de indagación, se decide retirar este municipio.
 
 #### 3. Documente la cardinalidad (muchos-a-uno) y cómo evita relaciones muchos-a-muchos.
 
-Teniendo como referencia la estrategia planteada en el punto 3 de la preparación de datos, verificamos el N de observaciones y el número de llaves distintas en cada base para identificar la tabla de "muchos" y la tabla de "uno". Además de esto se debe garantizar que las llaves no tengan duplicados (paso realizado previamente también) al igual que se debe hacer una verificación de los N totales durante el proceso de unión.   
+Teniendo como referencia la estrategia planteada en el punto 3 de la preparación de datos, verificamos el N de observaciones y el número de llaves distintas en cada base para identificar la tabla de "muchos" y la tabla de "uno". Además de esto se debe garantizar que las llaves no tengan duplicados (paso realizado previamente también) al igual que se debe hacer una verificación de los N totales durante el proceso de unión.
 
 ```{r}
 
@@ -254,7 +262,7 @@ print(paste("Número de filas en la 'base_area':", nrow(base_area)))
 print(paste("Número de llaves únicas 'base_area':", n_distinct(base_area$dpmp)))
 
 # UNICIDAD DE LAS LLAVES EN LA BASE AREA
-# Esto ya lo habíamos verificado, pero incluimos el paso por seguridas
+# Esto ya lo habíamos verificado, pero incluimos el paso por seguridad
 duplicados_en_area <- base_area %>%
   count(dpmp) %>%
   filter(n > 1)
@@ -267,6 +275,7 @@ print(paste("Filas en 'base_pob':", nrow(base_pob)))
 print(paste("Filas en 'base_final':", nrow(base_final)))
 
 ```
+
 ```{r}
 #Arreglo de base de datos 
 base_final <- base_final %>%
@@ -292,8 +301,6 @@ base_final_imp <- base_filtrada %>%
 
 ```
 
-
-
 ### Cálculos de interés (medición) Con la tabla integrada:
 
 #### 1. Densidad poblacional = Población / MPIO_NAREA.
@@ -303,10 +310,9 @@ base_final_imp <- base_final_imp %>%
   mutate(densidad_pob = poblacion_imputada/mpio_narea)
 ```
 
-
 #### 2. Crecimiento absoluto 1985→2018 y crecimiento porcentual 1985→2018 por municipio.
 
-Teniendo en cuenta la propuesta realizada de manejo de esta variable usando datos en formato ancho: 
+Teniendo en cuenta la propuesta realizada de manejo de esta variable usando datos en formato ancho:
 
 ```{r}
 
@@ -314,6 +320,7 @@ Teniendo en cuenta la propuesta realizada de manejo de esta variable usando dato
 datos_filtrados <- base_final_imp %>%
   select(dpmp, ano, poblacion_imputada) %>%
   filter(ano %in% c(1985, 2018))
+
 # Creamos un segundo objeto intermedio 'datos_anchos'
 datos_anchos <- datos_filtrados %>%
   pivot_wider(
@@ -321,11 +328,12 @@ datos_anchos <- datos_filtrados %>%
     values_from = poblacion_imputada,
     names_prefix = "pob_"
   )
+
 # Creamos el df con los crecimientos absolutos y relativos
 crecimiento_municipios <- datos_anchos %>%
   mutate(
     # Crecimiento Absoluto
-    crecimiento_abs = pob_2018 - pob_1985,
+    crecimiento_abs = (pob_2018 - pob_1985),
     
     # Crecimiento Porcentual
     crecimiento_pct = (crecimiento_abs / pob_1985) * 100)
@@ -336,13 +344,13 @@ variables_crecimiento <- crecimiento_municipios %>%
   select(dpmp, crecimiento_abs, crecimiento_pct)
 
 # Unimos las nuevas variables a la base de datos principal
-base_completa <- left_join(base_final_imp, variables_crecimiento, by = "dpmp")
-
+base_final_mpio <- left_join(base_final_imp, variables_crecimiento, by = "dpmp")
+write.xlsx(base_final_mpio, file = "base_mpio.xlsx", overwrite = TRUE)
 ```
 
 #### 3. Agregación por departamento (DP) para densidad y crecimiento (aclare la definición usada).
 
-Para estas variables se usará una aproximación de suma del área total de cada municipio (constante en el tiempo) y suma de la población total por municipio para cada año (progresa durante los diferentes censos). Luego de esto sí calculan la densidad y crecimiento poblacional. 
+Para estas variables se usará una aproximación de suma del área total de cada municipio (constante en el tiempo) y suma de la población total por municipio para cada año (progresa durante los diferentes censos). Luego de esto sí calculan la densidad y crecimiento poblacional.
 
 ```{r}
 # DENSIDAD POBLACIONAL
@@ -419,8 +427,7 @@ base_con_densidad <- left_join(base_final_imp, variables_densidad_depto, by = c(
 base_final_con_agregados <- left_join(base_con_densidad, crecimiento_departamental, by = c("dp", "dpnom"))
 
 # renombrando la base de análisis
-df_clean <- base_final_con_agregados
-
+base_final_dpto <- base_final_con_agregados
 
 ```
 
@@ -428,9 +435,126 @@ df_clean <- base_final_con_agregados
 
 #### 1. ¿Cuáles son los 20 municipios de Colombia con mayor crecimiento poblacional desde 1985? Absoluto y porcentual.
 
+```{r}
+# Top 20 en crecimiento absoluto
+top_abs <- base_final_mpio %>%
+  filter(ano %in% c(1985, 2018)) %>%       
+  group_by(mpio) %>%
+  summarise(
+    pob_1985 = poblacion[ano == 1985],
+    pob_2018 = poblacion[ano == 2018],
+    .groups = "drop"
+  ) %>%
+  mutate(crecimiento_abs = pob_2018 - pob_1985) %>%
+  arrange(desc(crecimiento_abs)) %>%
+  select(mpio, crecimiento_abs) %>%
+  slice_head(n = 20)
+
+print(top_abs)  
+write.xlsx(top_abs, file = "top_abs.xlsx", overwrite = TRUE)
+
+# Top 20 en crecimiento porcentual
+top_pct <- base_final_mpio %>%
+  filter(ano %in% c(1985, 2018)) %>%      
+  group_by(mpio) %>%
+  summarise(
+    pob_1985 = poblacion[ano == 1985],
+    pob_2018 = poblacion[ano == 2018],
+    .groups = "drop"
+  ) %>%
+  mutate(crecimiento_pct = (pob_2018 - pob_1985) / pob_1985 * 100) %>%
+  arrange(desc(crecimiento_pct)) %>%    
+  select(mpio, crecimiento_pct)  %>% 
+  slice_head(n = 20)        
+
+print(top_pct)
+write.xlsx(top_pct, file = "top_pct.xlsx", overwrite = TRUE)
+
+```
+
 #### 2. ¿Cuáles son los 10 municipios de Colombia con mayor densidad en 1993 y en 2018?
+
+```{r}
+top10_densidad <- base_final_mpio %>%
+  filter(ano %in% c(1993, 2018)) %>%           
+  group_by(ano) %>%                             
+  arrange(desc(densidad_pob), .by_group = TRUE) %>% 
+  select(mpio, densidad_pob)  %>% 
+  slice_head(n = 10) %>%                        
+  ungroup()
+
+print(top10_densidad)
+write.xlsx(top10_densidad, file = "top10_densidad.xlsx", overwrite = TRUE)
+```
 
 #### 3. ¿Cuáles son los 5 departamentos de Colombia con mayor densidad en 1993 y en 2018?
 
-#### 4. ¿Cómo ha cambiado la distribución de la población municipal colombiana desde 1985? Puede realizar un análisis por cuar les o percen les con gráficos.
+```{r}
+densidad_dpto <- base_final_dpto %>%
+  filter(ano %in% c(1993, 2018)) %>%
+  group_by(ano, dpnom) %>%
+  summarise(
+    poblacion_total = sum(poblacion, na.rm = TRUE),
+    area_total = sum(mpio_narea, na.rm = TRUE),
+    densidad_pob = poblacion_total / area_total,
+    .groups = "drop"
+  )
 
+top5_dpto <- densidad_dpto %>%
+  group_by(ano) %>%
+  arrange(desc(densidad_pob), .by_group = TRUE) %>%
+  select(ano,dpnom, densidad_pob)  %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+barras_dpto<- ggplot(top5_dpto, aes(x = reorder(dpnom, densidad_pob), 
+                      y = densidad_pob, 
+                      fill = as.factor(ano))) +
+  geom_col(position = "dodge") +
+  coord_flip() + 
+  labs(
+    title = "Top 5 departamentos con mayor densidad poblacional",
+    x = "Departamento",
+    y = "Densidad poblacional (hab/km²)",
+    fill = "Año"
+  ) +
+theme_minimal() +
+theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_fill_manual(values = c("1993" = "#1A2A80", "2018"="#FF7A30"))
+
+ggsave("grafico_barras.png", plot = barras_dpto, width = 8, height = 6, dpi = 300)
+```
+
+#### 4. ¿Cómo ha cambiado la distribución de la población municipal colombiana desde 1985? Puede realizar un análisis por cuartiles o percentiles con gráficos.
+
+```{r}
+# Calcular percentil ÿ cuartil de cada municipio por año
+pob_percentiles <- base_final_mpio %>%
+  group_by(ano) %>%
+  mutate(
+    percentil = ntile(poblacion, 100),
+    cuartil   = ntile(poblacion, 4)
+  )%>%
+ungroup()
+
+pob_cuartiles <- pob_percentiles %>%
+  group_by(ano, cuartil) %>%
+  summarise(
+    poblacion_total = sum(poblacion, na.rm = TRUE),
+    .groups="drop"
+)
+
+ggplot(base_completa %>% filter(ano %in% c(1985, 1993, 2005, 2018)),
+       aes(x = as.factor(ano), y = poblacion)) +
+  geom_boxplot() +
+  scale_y_log10() +   # útil porque hay mucha desigualdad entre municipios
+  labs(
+    title = "Distribución de la población municipal en Colombia",
+    y = "Población municipal (escala log)",
+    x = "Año"
+  ) +
+theme_minimal()
+```
